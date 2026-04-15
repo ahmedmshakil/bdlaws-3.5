@@ -14,6 +14,7 @@ except ModuleNotFoundError as exc:  # pragma: no cover - dependency path
     ) from exc
 
 from .config import load_app_config
+from .policy import build_guardrail_payload
 from .prompts import build_low_confidence_response, build_query_prompt
 from .retrieval import retrieve_chunks
 
@@ -56,12 +57,17 @@ def query_ollama(host: str, model: str, system_prompt: str, user_prompt: str) ->
 
 def run_query_pipeline(question: str, root: str | Path = ".", model_name: str | None = None, top_k: int | None = None) -> dict[str, Any]:
     config = get_config(str(root))
+    guardrail_payload = build_guardrail_payload(question, config)
+    if guardrail_payload is not None:
+        return guardrail_payload
+
     retrieval = retrieve_chunks(question, config, top_k=top_k)
     if not retrieval["grounded"]:
         payload = build_low_confidence_response(config.project["assistant"]["low_confidence_message"])
         payload["retrieved"] = retrieval["chunks"]
         payload["best_dense_score"] = retrieval["best_dense_score"]
         payload["best_bm25_score"] = retrieval["best_bm25_score"]
+        payload["intent"] = "law"
         return payload
 
     prompt = build_query_prompt(
@@ -82,6 +88,7 @@ def run_query_pipeline(question: str, root: str | Path = ".", model_name: str | 
         "citations": citations,
         "confidence": confidence,
         "grounded": True,
+        "intent": "law",
         "best_dense_score": retrieval["best_dense_score"],
         "best_bm25_score": retrieval["best_bm25_score"],
         "retrieved": retrieval["chunks"],
