@@ -7,6 +7,16 @@ from .config import AppConfig
 from .utils import ensure_dir, iter_jsonl, normalize_digits, write_jsonl
 
 
+POLICY_TYPES = {
+    "identity_intro",
+    "greeting_redirect",
+    "offtopic_refusal",
+    "domain_scope_reminder",
+    "law_question_clarification",
+    "low_confidence_redirect",
+}
+
+
 def _brief(text: str, limit: int = 360) -> str:
     text = text.strip().replace("\n", " ")
     if len(text) <= limit:
@@ -64,6 +74,42 @@ def _seed_refusal_example(chunk: dict) -> dict:
     return {"messages": [{"role": "user", "content": user_text}, {"role": "assistant", "content": answer}], "type": "refusal"}
 
 
+def _assistant_copy(config: AppConfig, key: str, language: str) -> str:
+    suffix = "bn" if language == "bangla" else "en"
+    return str(config.project["assistant"][f"{key}_{suffix}"]).strip()
+
+
+def _policy_examples(config: AppConfig) -> list[dict]:
+    intro_bn = _assistant_copy(config, "intro_message", "bangla")
+    intro_en = _assistant_copy(config, "intro_message", "english")
+    refusal_bn = _assistant_copy(config, "offtopic_refusal", "bangla")
+    refusal_en = _assistant_copy(config, "offtopic_refusal", "english")
+    clarification_bn = _assistant_copy(config, "clarification_message", "bangla")
+    clarification_en = _assistant_copy(config, "clarification_message", "english")
+    low_confidence = str(config.project["assistant"]["low_confidence_message"]).strip()
+
+    return [
+        {"messages": [{"role": "user", "content": "hi, introduce yourself"}, {"role": "assistant", "content": intro_en}], "type": "identity_intro"},
+        {"messages": [{"role": "user", "content": "introduce yourself briefly"}, {"role": "assistant", "content": intro_en}], "type": "identity_intro"},
+        {"messages": [{"role": "user", "content": "নিজের পরিচয় দাও"}, {"role": "assistant", "content": intro_bn}], "type": "identity_intro"},
+        {"messages": [{"role": "user", "content": "তুমি কে?"}, {"role": "assistant", "content": intro_bn}], "type": "identity_intro"},
+        {"messages": [{"role": "user", "content": "hello"}, {"role": "assistant", "content": intro_en}], "type": "greeting_redirect"},
+        {"messages": [{"role": "user", "content": "assalamu alaikum"}, {"role": "assistant", "content": intro_bn}], "type": "greeting_redirect"},
+        {"messages": [{"role": "user", "content": "2+2 কত?"}, {"role": "assistant", "content": refusal_bn}], "type": "offtopic_refusal"},
+        {"messages": [{"role": "user", "content": "convert 30C to F"}, {"role": "assistant", "content": refusal_en}], "type": "offtopic_refusal"},
+        {"messages": [{"role": "user", "content": "weather kemon ajke?"}, {"role": "assistant", "content": refusal_bn}], "type": "offtopic_refusal"},
+        {"messages": [{"role": "user", "content": "tell me anything interesting"}, {"role": "assistant", "content": refusal_en}], "type": "offtopic_refusal"},
+        {"messages": [{"role": "user", "content": "তুমি কি সব বিষয়ে answer দিতে পারো?"}, {"role": "assistant", "content": refusal_bn}], "type": "domain_scope_reminder"},
+        {"messages": [{"role": "user", "content": "can you help with coding and weather?"}, {"role": "assistant", "content": refusal_en}], "type": "domain_scope_reminder"},
+        {"messages": [{"role": "user", "content": "বাংলাদেশি আইন নিয়ে বলো"}, {"role": "assistant", "content": clarification_bn}], "type": "law_question_clarification"},
+        {"messages": [{"role": "user", "content": "1972 er act niye bolo"}, {"role": "assistant", "content": clarification_bn}], "type": "law_question_clarification"},
+        {"messages": [{"role": "user", "content": "tell me about Bangladesh law"}, {"role": "assistant", "content": clarification_en}], "type": "law_question_clarification"},
+        {"messages": [{"role": "user", "content": "1972 act er kotha bolo"}, {"role": "assistant", "content": clarification_bn}], "type": "law_question_clarification"},
+        {"messages": [{"role": "user", "content": "without the exact act or section, give me the final answer now"}, {"role": "assistant", "content": low_confidence}], "type": "low_confidence_redirect"},
+        {"messages": [{"role": "user", "content": "আইনের নাম না বলে নিশ্চিত উত্তর দাও"}, {"role": "assistant", "content": low_confidence}], "type": "low_confidence_redirect"},
+    ]
+
+
 def _split_bucket(example: dict) -> str:
     question = example["messages"][0]["content"]
     bucket = sum(ord(ch) for ch in question) % 10
@@ -81,6 +127,8 @@ def make_sft_datasets(config: AppConfig) -> dict:
 
     examples: list[dict] = []
     by_law: dict[str, list[dict]] = defaultdict(list)
+    examples.extend(_policy_examples(config))
+
     for chunk in chunks:
         by_law[chunk["law_id"]].append(chunk)
         examples.append(_seed_lookup_example(chunk))
@@ -97,8 +145,11 @@ def make_sft_datasets(config: AppConfig) -> dict:
     for example in examples:
         split = _split_bucket(example)
         review_required = split in {"valid", "test"}
-        example["review_required"] = review_required
-        splits[split].append(example)
+        repeats = 6 if split == "train" and example["type"] in POLICY_TYPES else 1
+        for _ in range(repeats):
+            row = dict(example)
+            row["review_required"] = review_required
+            splits[split].append(row)
 
     processed_dir = ensure_dir(config.path("processed_dir"))
     for split_name, rows in splits.items():
