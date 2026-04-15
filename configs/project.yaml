@@ -1,0 +1,44 @@
+project_name: bd-law-assistant
+
+paths:
+  raw_root: extracted_laws/bdlaws_json_extra
+  raw_glob: volume_*.json
+  ignore_globs:
+    - complete_extraction.json
+    - bangladesh_laws_*.json
+  fallback_txt_root: extracted_laws/bdcode_txt
+  processed_dir: data/processed
+  benchmark_dir: data/benchmarks
+  retrieval_dir: artifacts/retrieval
+  training_dir: artifacts/training
+  ollama_dir: /tmp/bdlaw-ollama
+  modelfile_path: ollama/Modelfile
+  temp_merged_dir: artifacts/training/merged-f16
+
+assistant:
+  language_policy: bilingual
+  default_response_language: bangla
+  bilingual_support_language: english
+  cite_required: true
+  not_legal_advice: true
+  low_confidence_message: "প্রাসঙ্গিক আইনগত প্রেক্ষিত যথেষ্ট নির্ভরযোগ্যভাবে পাওয়া যায়নি। আমি নিশ্চিত নই, তাই দয়া করে মূল আইনপাঠ বা আইনজীবীর সাথে মিলিয়ে নিন।"
+  system_prompt: |
+    You are a Bangladesh law assistant.
+    Answer in the user's language. If the prompt is mixed, answer in Bangla first and provide a short English support line if useful.
+    Always cite the relevant law title and section or page if available.
+    If retrieved context is weak or missing, clearly say you are not certain.
+    Do not claim to provide formal legal advice.
+
+models:
+  base_model: Qwen/Qwen2.5-3B-Instruct
+  embedding_model: BAAI/bge-m3
+  ollama_model_name: shaqirii13/bdlaws-3.5
+  ollama_host: http://localhost:11434
+
+export:
+  gguf_quantization: q4_k_m
+  runtime_context: 4096
+  temperature: 0.1
+  top_p: 0.9
+  repeat_penalty: 1.1
+  num_predict: 768

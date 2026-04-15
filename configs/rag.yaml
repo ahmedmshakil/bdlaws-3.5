@@ -1,0 +1,17 @@
+chunking:
+  min_chars: 900
+  max_chars: 1200
+  overlap: 120
+  section_markers:
+    - "(?im)^\\s*(section|article|chapter)\\b"
+    - "(?im)^\\s*\\d+[.)]\\s+"
+    - "(?im)^\\s*(ধারা|অনুচ্ছেদ|অধ্যায়)\\b"
+    - "(?im)^\\s*[০-৯]+[।.)]\\s+"
+
+retrieval:
+  top_k: 12
+  rerank_top_k: 6
+  rrf_k: 60
+  dense_score_threshold: 0.28
+  bm25_min_score: 0.1
+  max_context_chunks: 4
