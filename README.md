@@ -13,6 +13,13 @@ Hybrid RAG + QLoRA pipeline for Bangladesh law data with local Ollama publishing
 - Exports GGUF artifacts and an Ollama `Modelfile`
 - Serves retrieval-grounded queries through CLI and FastAPI
 
+## Ollama Runtime
+
+- Current safer Ollama release target: `shaqirii13/bdlaws-3.6`
+- Direct `ollama run` is intended to stay Bangladesh-law-only
+- Greetings are allowed, but off-topic prompts should be refused with a Bangladesh law reminder
+- Best results still come from the retrieval-backed CLI or API path
+
 ## Local Data Requirement
 
 This repository does not include the raw extracted law corpus, processed datasets, or model weights in Git. Keep these local on your machine:
