@@ -6,7 +6,7 @@ import subprocess
 from pathlib import Path
 
 from .config import AppConfig
-from .utils import ensure_dir
+from .utils import compact_whitespace, ensure_dir
 
 
 def merge_lora_adapter(config: AppConfig) -> Path:
@@ -151,15 +151,31 @@ def write_modelfile(config: AppConfig, gguf_path: Path) -> Path:
     modelfile_path = config.path("modelfile_path")
     system_prompt = config.project["assistant"]["system_prompt"].strip()
     export_cfg = config.project["export"]
-    content = (
-        f"FROM {gguf_path.resolve()}\n\n"
-        f'SYSTEM """\n{system_prompt}\n"""\n\n'
-        f"PARAMETER temperature {export_cfg['temperature']}\n"
-        f"PARAMETER top_p {export_cfg['top_p']}\n"
-        f"PARAMETER repeat_penalty {export_cfg['repeat_penalty']}\n"
-        f"PARAMETER num_ctx {export_cfg['runtime_context']}\n"
-        f"PARAMETER num_predict {export_cfg['num_predict']}\n"
-    )
+    template = str(export_cfg["chat_template"]).strip()
+    stop_tokens = [str(token) for token in export_cfg.get("stop_tokens", [])]
+    seed_messages = list(export_cfg.get("seed_messages", []))
+    parts = [
+        f"FROM {gguf_path.resolve()}",
+        "",
+        f'TEMPLATE """{template}"""',
+        "",
+        f'SYSTEM """\n{system_prompt}\n"""',
+        "",
+        f"PARAMETER temperature {export_cfg['temperature']}",
+        f"PARAMETER top_p {export_cfg['top_p']}",
+        f"PARAMETER repeat_penalty {export_cfg['repeat_penalty']}",
+        f"PARAMETER num_ctx {export_cfg['runtime_context']}",
+        f"PARAMETER num_predict {export_cfg['num_predict']}",
+    ]
+    for token in stop_tokens:
+        parts.append(f'PARAMETER stop "{token}"')
+    if seed_messages:
+        parts.append("")
+        for message in seed_messages:
+            role = str(message["role"]).strip()
+            content = compact_whitespace(str(message["content"]))
+            parts.append(f"MESSAGE {role} {content}")
+    content = "\n".join(parts) + "\n"
     ensure_dir(modelfile_path.parent)
     modelfile_path.write_text(content, encoding="utf-8")
     return modelfile_path
